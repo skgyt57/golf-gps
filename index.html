@@ -1,0 +1,187 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#1F6B47">
+<meta name="robots" content="noindex">
+<title>ゴルフGPS打点</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;700&family=Zen+Kaku+Gothic+New:wght@400;700&display=swap">
+<style>
+/* 片手で押す前提。上にホール、真ん中に大きい記録ボタン、下に送るボタン */
+:root{
+  --paper:#F2F5F1; --card:#FFFFFF; --ink:#16201A; --muted:#5B6A61; --line:#D3DBD3;
+  --turf:#1F6B47; --on-turf:#FFFFFF; --turf-soft:#E2EFE6; --warn:#A86E14; --bad:#BC3B27;
+  --f-body:"Zen Kaku Gothic New","Hiragino Sans","Yu Gothic UI","Meiryo",sans-serif;
+  --f-num:"Barlow Condensed","Arial Narrow",sans-serif;
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){:root{
+  --paper:#0F1512; --card:#18201B; --ink:#E5ECE7; --muted:#97A69D; --line:#2B362F;
+  --turf:#4DB07C; --on-turf:#08130D; --turf-soft:#1C2C22; --warn:#E0A548; --bad:#EC7462; color-scheme:dark}}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--paper);color:var(--ink)}
+body{font-family:var(--f-body);font-size:15px;line-height:1.6;-webkit-tap-highlight-color:transparent;
+  padding:env(safe-area-inset-top,0px) 16px calc(env(safe-area-inset-bottom,0px) + 20px)}
+button{font:inherit;color:inherit;cursor:pointer}
+:focus-visible{outline:2px solid var(--turf);outline-offset:2px}
+.app{max-width:480px;margin:0 auto;display:flex;flex-direction:column;gap:14px;padding-top:14px}
+.num{font-family:var(--f-num);font-variant-numeric:tabular-nums}
+.top{display:flex;align-items:center;gap:10px}
+.top h1{font-size:15px;margin:0;flex:1;color:var(--muted);font-weight:700}
+.date{font-size:13px;color:var(--muted)}
+.hole{display:grid;grid-template-columns:64px 1fr 64px;align-items:center;background:var(--card);border:1px solid var(--line);border-radius:16px;padding:8px}
+.hole button{height:64px;border-radius:12px;border:1px solid var(--line);background:var(--paper);font-size:28px;font-weight:700}
+.hole .mid{text-align:center;line-height:1.1}
+.hole .mid b{font-family:var(--f-num);font-size:56px}
+.hole .mid span{display:block;font-size:12px;color:var(--muted)}
+.rec{height:min(34vh,240px);border:0;border-radius:24px;background:var(--turf);color:var(--on-turf);font-size:26px;font-weight:700;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px}
+.rec small{font-size:14px;font-weight:400;opacity:.9}
+.rec:disabled{opacity:.6}
+.status{min-height:22px;font-size:14px;text-align:center;color:var(--muted)}
+.status.warn{color:var(--warn)} .status.bad{color:var(--bad)}
+.pts{background:var(--card);border:1px solid var(--line);border-radius:14px;overflow:hidden}
+.pt{display:grid;grid-template-columns:72px 1fr auto;gap:8px;align-items:center;padding:10px 12px;border-top:1px solid var(--line)}
+.pt:first-child{border-top:0}
+.pt .k{font-weight:700}
+.pt .d{font-family:var(--f-num);font-size:18px}
+.pt .a{font-size:12px;color:var(--muted)}
+.empty{padding:14px;color:var(--muted);text-align:center;font-size:14px}
+.row{display:flex;gap:8px;flex-wrap:wrap}
+.btn{flex:1;min-height:52px;border-radius:14px;border:1px solid var(--line);background:var(--card);font-weight:700;padding:0 12px}
+.btn.main{background:var(--ink);color:var(--paper);border-color:var(--ink)}
+.btn.warn{color:var(--bad)} .btn.arm{background:var(--bad);color:var(--card);border-color:var(--bad)}
+.howto{font-size:13px;color:var(--muted);background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px 14px}
+.howto ol{margin:4px 0 0;padding-left:20px}
+textarea{width:100%;min-height:90px;border:1px solid var(--line);border-radius:10px;background:var(--paper);color:var(--ink);padding:8px;font-size:12px}
+.sum{font-size:13px;color:var(--muted);text-align:center}
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="top"><h1>ゴルフGPS打点</h1><span class="date" id="date"></span></div>
+
+  <div class="hole">
+    <button id="prev" aria-label="前のホール">−</button>
+    <div class="mid"><b id="hno">1</b><span>ラウンドの何ホール目か</span></div>
+    <button id="next" aria-label="次のホール">＋</button>
+  </div>
+
+  <button class="rec" id="rec"><span id="recLabel">ティーで記録</span><small id="recSub">打つ前に、ボールの横で押す</small></button>
+  <div class="status" id="status" role="status"></div>
+
+  <div class="pts" id="pts"></div>
+  <div class="row">
+    <button class="btn" id="undo">最後の1点を消す</button>
+    <button class="btn" id="nexthole">次のホールへ</button>
+  </div>
+
+  <div class="row"><button class="btn main" id="send">記録ページへ送る</button></div>
+  <div class="sum" id="sum"></div>
+
+  <details class="howto"><summary>使い方</summary>
+    <ol>
+      <li>ティーで「記録」を押す。</li>
+      <li>2打目からは、打つ前にボールの横で押す。</li>
+      <li>グリーンに乗ったら1回押す（パットでは押さない）。</li>
+      <li>ホールが終わったら「次のホールへ」。</li>
+      <li>好きなときに「記録ページへ送る」。記録ページで「取り込む」を押すと、飛距離と残りが入る。</li>
+    </ol>
+    記録はこのスマホの中だけに残ります。GPSの誤差は5〜10ヤードほどです。
+  </details>
+
+  <details class="howto"><summary>送れないとき（コピーして貼る）</summary>
+    <p>下の文字を全部コピーして、記録ページの「ラウンド」タブにある「GPSの記録を貼る」に貼ってください。</p>
+    <textarea id="code" readonly></textarea>
+    <div class="row" style="margin-top:8px"><button class="btn" id="copy">コピー</button></div>
+  </details>
+
+  <div class="row"><button class="btn warn" id="reset">新しいラウンドにする（記録を消す）</button></div>
+</div>
+
+<script>
+"use strict";
+const RECORD_URL='https://claude.ai/artifact/Rk5St87FLwhisHphBNZKRf';
+const KEY='golf-gps-v1';
+let st={date:new Date(Date.now()+9*3600e3).toISOString().slice(0,10),hole:1,pts:[]};
+try{const s=JSON.parse(localStorage.getItem(KEY)||'null');if(s&&Array.isArray(s.pts))st=s}catch(e){}
+let busy=false, armed=false, wake=null;
+const $=id=>document.getElementById(id);
+function save(){try{localStorage.setItem(KEY,JSON.stringify(st))}catch(e){}}
+function yd(a,b){const r=Math.PI/180,dl=(b.lat-a.lat)*r,dn=(b.lon-a.lon)*r,h=Math.sin(dl/2)**2+Math.cos(a.lat*r)*Math.cos(b.lat*r)*Math.sin(dn/2)**2;return 2*6371008.8*Math.asin(Math.sqrt(h))/0.9144}
+const holePts=n=>st.pts.filter(p=>p.h===n);
+function setStatus(m,cls){const el=$('status');el.textContent=m;el.className='status'+(cls?' '+cls:'')}
+
+function render(){
+  $('date').textContent=st.date; $('hno').textContent=st.hole;
+  const ps=holePts(st.hole);
+  $('recLabel').textContent=ps.length?`${ps.length+1}点目を記録`:'ティーで記録';
+  $('recSub').textContent=ps.length?'打つ前にボールの横で（グリーンに乗ったら1回）':'ティーグラウンドで押す';
+  $('pts').innerHTML=ps.length?ps.map((p,i)=>{const d=i?Math.round(yd(ps[i-1],p)):null;
+    return `<div class="pt"><span class="k">${i?i+'打目の後':'ティー'}</span><span class="d">${d!=null?d+'y':''}</span><span class="a">±${Math.round(p.acc)}m</span></div>`}).join('')
+    :`<div class="empty">このホールはまだ記録がありません</div>`;
+  const holes=new Set(st.pts.map(p=>p.h));
+  $('sum').textContent=st.pts.length?`全部で ${st.pts.length}点・${holes.size}ホール分`:'';
+  $('code').value=st.pts.length?encode():'';
+  $('reset').textContent=armed?'もう一度押すと消します':'新しいラウンドにする（記録を消す）';
+  $('reset').classList.toggle('arm',armed);
+}
+
+/* 精度の良い1点を取る：最大8秒、誤差15m以内が来たらすぐ確定 */
+function locate(){
+  return new Promise((res,rej)=>{
+    if(!navigator.geolocation)return rej(new Error('この端末ではGPSが使えません'));
+    let best=null;
+    const id=navigator.geolocation.watchPosition(p=>{
+      const c=p.coords;if(!best||c.accuracy<best.acc)best={lat:c.latitude,lon:c.longitude,acc:c.accuracy};
+      setStatus(`測定中… 誤差 ±${Math.round(c.accuracy)}m`);
+      if(c.accuracy<=15)done();
+    },err=>{navigator.geolocation.clearWatch(id);clearTimeout(t);
+      rej(new Error(err.code===1?'位置情報が許可されていません。ブラウザの設定で、このサイトの位置情報を許可してください':'位置が取れませんでした。空が開けた所でもう一度押してください'))},
+    {enableHighAccuracy:true,maximumAge:0,timeout:15000});
+    const t=setTimeout(done,8000);
+    function done(){navigator.geolocation.clearWatch(id);clearTimeout(t);best?res(best):rej(new Error('位置が取れませんでした'))}
+  });
+}
+$('rec').addEventListener('click',async()=>{
+  if(busy)return; busy=true; $('rec').disabled=true; armed=false;
+  try{
+    const p=await locate();
+    st.pts.push({h:st.hole,t:Date.now(),lat:+p.lat.toFixed(6),lon:+p.lon.toFixed(6),acc:Math.round(p.acc)});
+    save(); render();
+    setStatus(`記録しました（誤差 ±${Math.round(p.acc)}m）`,p.acc>25?'warn':'');
+    if(navigator.vibrate)navigator.vibrate(40);
+  }catch(e){setStatus(e.message,'bad')}
+  finally{busy=false;$('rec').disabled=false}
+  keepAwake();
+});
+$('prev').onclick=()=>{st.hole=Math.max(1,st.hole-1);armed=false;save();render();setStatus('')};
+$('next').onclick=$('nexthole').onclick=()=>{st.hole=Math.min(27,st.hole+1);armed=false;save();render();setStatus('')};
+$('undo').onclick=()=>{const ps=holePts(st.hole);if(!ps.length)return;st.pts.splice(st.pts.lastIndexOf(ps[ps.length-1]),1);save();render();setStatus('最後の1点を消しました')};
+$('reset').onclick=()=>{if(!armed){armed=true;render();return}armed=false;st={date:new Date(Date.now()+9*3600e3).toISOString().slice(0,10),hole:1,pts:[]};save();render();setStatus('新しいラウンドにしました')};
+
+/* 記録ページへ：URLの#に入るのは英数字と . _ ~ - だけなので、base64url（=なし）で詰める */
+function encode(){
+  if(!st.pts.length)return '';
+  const b=st.pts[0], la0=Math.round(b.lat*1e6), lo0=Math.round(b.lon*1e6);
+  const body=[st.date.replace(/-/g,''),la0,lo0].join(',')+';'+st.pts.map(p=>[p.h,Math.round(p.lat*1e6)-la0,Math.round(p.lon*1e6)-lo0,p.acc].join(',')).join(';');
+  return 'gps1'+btoa(body).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+}
+$('send').onclick=()=>{
+  if(!st.pts.length){setStatus('まだ記録がありません','warn');return}
+  location.href=RECORD_URL+'#'+encode();
+};
+$('copy').onclick=()=>{
+  const v=$('code').value; if(!v)return;
+  const ok=()=>setStatus('コピーしました。記録ページに貼ってください');
+  const ng=()=>{$('code').select();setStatus('長押しでコピーしてください','warn')};
+  try{navigator.clipboard.writeText(v).then(ok,ng)}catch(e){ng()}
+};
+async function keepAwake(){try{if(!wake&&navigator.wakeLock){wake=await navigator.wakeLock.request('screen');wake.addEventListener('release',()=>wake=null)}}catch(e){}}
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&st.pts.length)keepAwake()});
+render();
+</script>
+</body>
+</html>
